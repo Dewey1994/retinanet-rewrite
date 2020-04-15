@@ -12,8 +12,8 @@
     "freeze_stages": 1,
     "epoches": 40,
 
-    "nbatch_train": 8,
-    "nbatch_eval": 8,
+    "nbatch_train": 4,
+    "nbatch_eval": 4,
     "device": [0],
     "num_workers": 16,
 

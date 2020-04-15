@@ -12,20 +12,6 @@ from libs.nms import box_nms
 from backbone import resnet50 as backbone
 from bifpn import BIFPN
 
-
-class ConvBlock(nn.Module):
-    def __init__(self, num_channels):
-        super(ConvBlock, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(num_channels, num_channels, kernel_size=3, stride=1, padding=1),
-            nn.Conv2d(num_channels, num_channels, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(num_features=num_channels, momentum=0.01, eps=1e-3), nn.ReLU()
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
-
 class Detector(nn.Module):
     def __init__(self, pretrained=False):
         super(Detector, self).__init__()
@@ -51,7 +37,7 @@ class Detector(nn.Module):
         # self.scales = [0,0,1,1,2]
         self.first_stride = 8
         # self.view_size = 1025
-        self.view_size = 641
+        self.view_size = 640
         self.iou_th = (0.4, 0.5)
         self.classes = 20
         # self.classes = 80
@@ -80,7 +66,7 @@ class Detector(nn.Module):
         # self.conv_3 =nn.Conv2d(256, 256, kernel_size=3, padding=1)
 
         self.bifpn = nn.Sequential(
-        *[BIFPN(256, [2048, 1024, 512], True if _ == 0 else False, attention=True)
+        *[BIFPN(256, [512, 1024, 2048], True if _ == 0 else False, attention=True)
           for _ in range(3)])
 
         # head =======================================================

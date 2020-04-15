@@ -120,6 +120,6 @@ while True:
     writer.add_scalars('mAPs', {'mAP_mean': map_mean, 'mAP50': map_50, 'mAP75': map_75}, trainer.epoch)
     log.append([map_mean, map_50, map_75, trainer.step, trainer.epoch])
     if cfg['save']:
-        torch.save(net.module.state_dict(), './weights/voc_RTX2070_retinanet3_{}.pth'.format(trainer.epoch))
-        np.save('./logs/log3_{}.npy'.format(trainer.epoch), log)
+        torch.save(net.module.state_dict(), './weights/voc_RTX2070_retinanet_{}.pth'.format(trainer.epoch))
+        np.save('./logs/log_{}.npy'.format(trainer.epoch), log)
 print('Schedule finished!')

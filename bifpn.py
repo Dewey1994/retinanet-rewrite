@@ -5,9 +5,10 @@ import math
 
 
 class Conv2dSamePadding(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, bias=True, groups=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, bias=True, groups=1):
         super(Conv2dSamePadding, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, bias, groups)
+        self.conv = nn.Conv2d(in_channels, out_channels,
+                              kernel_size=kernel_size, stride=stride, bias=bias, groups=groups)
         self.stride = self.conv.stride
         self.kernel_size = self.conv.kernel_size
 
@@ -146,6 +147,60 @@ class BIFPN(nn.Module):
         self.p5_downsample = MaxPool2dSamePadding(3, 2)
         self.p6_downsample = MaxPool2dSamePadding(3, 2)
         self.p7_downsample = MaxPool2dSamePadding(3, 2)
+
+        self.first_time = first_time
+        if self.first_time:
+            self.p5_down_channel = nn.Sequential(
+                Conv2dSamePadding(conv_channels[2], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+            )
+            self.p4_down_channel = nn.Sequential(
+                Conv2dSamePadding(conv_channels[1], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+            )
+            self.p3_down_channel = nn.Sequential(
+                Conv2dSamePadding(conv_channels[0], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+            )
+
+            self.p5_to_p6 = nn.Sequential(
+                Conv2dSamePadding(conv_channels[2], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+                MaxPool2dSamePadding(3, 2)
+            )
+            self.p6_to_p7 = nn.Sequential(
+                MaxPool2dSamePadding(3, 2)
+            )
+
+            self.p4_down_channel_2 = nn.Sequential(
+                Conv2dSamePadding(conv_channels[1], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+            )
+            self.p5_down_channel_2 = nn.Sequential(
+                Conv2dSamePadding(conv_channels[2], num_channels, 1),
+                nn.BatchNorm2d(num_channels, momentum=0.01, eps=1e-3),
+            )
+
+        # Weight
+        self.p6_w1 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.p6_w1_relu = nn.ReLU()
+        self.p5_w1 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.p5_w1_relu = nn.ReLU()
+        self.p4_w1 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.p4_w1_relu = nn.ReLU()
+        self.p3_w1 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.p3_w1_relu = nn.ReLU()
+
+        self.p4_w2 = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.p4_w2_relu = nn.ReLU()
+        self.p5_w2 = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.p5_w2_relu = nn.ReLU()
+        self.p6_w2 = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.p6_w2_relu = nn.ReLU()
+        self.p7_w2 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.p7_w2_relu = nn.ReLU()
+
+        self.attention = attention
 
         self.swish = Swish()
 
