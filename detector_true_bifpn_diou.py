@@ -6,11 +6,12 @@ import torch.nn.functional as F
 from utils_box.anchors import gen_anchors, box_iou
 from libs.sigmoid_focal_loss import sigmoid_focal_loss
 from libs.smooth_l1_loss import smooth_l1_loss
+from libs.iou_loss import diou_loss_diy
 from libs.nms import box_nms 
 # TODO: choose backbone
 # from backbone import resnext50_32x4d as backbone
 from backbone import resnet50 as backbone
-from bifpn import BIFPN, DepthWiseConvBlock
+from bifpn import BIFPN
 
 class Detector(nn.Module):
     def __init__(self, pretrained=False):
@@ -50,15 +51,6 @@ class Detector(nn.Module):
         self.backbone = backbone(pretrained=pretrained)
         self.relu = nn.ReLU(inplace=True)
 
-        # self.conv_out6 = nn.Conv2d(2048, 256, kernel_size=3, padding=1, stride=2)
-        # self.conv_out7 = nn.Conv2d(256, 256, kernel_size=3, padding=1, stride=2)
-        # self.prj_5 = nn.Conv2d(2048, 256, kernel_size=1)
-        # self.prj_4 = nn.Conv2d(1024, 256, kernel_size=1)
-        # self.prj_3 = nn.Conv2d(512, 256, kernel_size=1)
-        # self.conv_5 =nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        # self.conv_4 =nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        # self.conv_3 =nn.Conv2d(256, 256, kernel_size=3, padding=1)
-
         self.bifpn = nn.Sequential(
         *[BIFPN(256, [512, 1024, 2048], True if _ == 0 else False, attention=True)
           for _ in range(3)])
@@ -74,18 +66,7 @@ class Detector(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, len(self.a_hw)*self.classes, kernel_size=3, padding=1))
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, len(self.a_hw)*self.classes, True, True))
-
         self.conv_reg = nn.Sequential(
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, 256, True, True),
-            # DepthWiseConvBlock(256, len(self.a_hw)*4, True, True))
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
@@ -97,29 +78,6 @@ class Detector(nn.Module):
             nn.Conv2d(256, len(self.a_hw)*4, kernel_size=3, padding=1))
 
         # reinit head =======================================================
-        for m in self.bifpn.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-        # for m in self.conv_cls.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
-        #
-        # for m in self.conv_reg.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
         for layer in self.conv_cls.children():
             if isinstance(layer, nn.Conv2d):
                 nn.init.constant_(layer.bias, 0)
@@ -132,13 +90,6 @@ class Detector(nn.Module):
         _bias = -math.log((1.0-pi)/pi)
         nn.init.constant_(self.conv_cls[-1].bias, _bias)
 
-        # for m in self.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
         # generate anchors =======================================================
         self._view_anchors_yxyx, self._view_anchors_yxhw = \
             gen_anchors(self.a_hw, self.scales, self.view_size, self.first_stride)
@@ -187,10 +138,6 @@ class Detector(nn.Module):
 
         P3, P4, P5, P6, P7 = H3, H4, H5, P6, P7
 
-        # log = [w_2_in.data.cpu().numpy(), w_3_in.data.cpu().numpy()]
-        # np.save('./bifpn_weight/weight_log', log)
-        # print('w_2_in = {0}, w_3_in={1}'.format(w_2_in.data.cpu().numpy(), w_3_in.data.cpu().numpy()))
-
         if self.balanced_fpn:
             # kernel_size, stride, padding, dilation, False, False
             P3 = F.max_pool2d(P3, 3, 2, 1, 1, False, False)
@@ -236,7 +183,7 @@ class Detector(nn.Module):
                 targets_cls_b = targets_cls[b][mask_cls[b]] # (S+-)
                 targets_reg_b = targets_reg[b][mask_reg[b]] # # (S+, 4)
                 loss_cls_b = sigmoid_focal_loss(cls_out_b, targets_cls_b, 2.0, 0.25).sum().view(1)
-                loss_reg_b = smooth_l1_loss(reg_out_b, targets_reg_b, 0.11).sum().view(1)
+                loss_reg_b = diou_loss_diy(reg_out_b, targets_reg_b).sum().view(1)
                 loss.append((loss_cls_b + loss_reg_b) / float(num_pos[b])) 
             return torch.cat(loss, dim=0) # (b
         else:
@@ -387,6 +334,5 @@ def get_pred(temp, nms_th, nms_iou):
         _cls_p_preds.append(cls_p_preds_b[keep])
         _reg_preds.append(reg_preds_b[keep])
     return _cls_i_preds, _cls_p_preds, _reg_preds
-
 
 

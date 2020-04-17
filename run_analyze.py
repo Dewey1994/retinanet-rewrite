@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-log = np.load('./logs/log3_30.npy')
+log = np.load('./logs/log_40.npy')
 
 map_mean = []
 map_50 = []

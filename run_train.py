@@ -5,7 +5,7 @@ import time
 import api
 from utils_box.dataset import Dataset_CSV
 # from detector import Detector
-from detector_true_bifpn import Detector
+from detector_true_bifpn_diou import Detector
 import utils_box.augment as augment
 import random
 from math import cos, pi
@@ -26,6 +26,7 @@ if cfg['load']:
     net.load_state_dict(torch.load('./weights/voc_RTX2070_retinanet_9.pth', map_location=device_out))
     log = list(np.load('./logs/log_9.npy'))
     print("looded ckpt and log!!!")
+
 net = torch.nn.DataParallel(net, device_ids=cfg['device'])
 net = net.cuda(cfg['device'][0])
 net.train()
@@ -120,6 +121,6 @@ while True:
     writer.add_scalars('mAPs', {'mAP_mean': map_mean, 'mAP50': map_50, 'mAP75': map_75}, trainer.epoch)
     log.append([map_mean, map_50, map_75, trainer.step, trainer.epoch])
     if cfg['save']:
-        torch.save(net.module.state_dict(), './weights/voc_RTX2070_retinanet_{}.pth'.format(trainer.epoch))
-        np.save('./logs/log_{}.npy'.format(trainer.epoch), log)
+        torch.save(net.module.state_dict(), './weights/voc_RTX2070_retinanet_dioudiy{}.pth'.format(trainer.epoch))
+        np.save('./logs/logdioudiy_{}.npy'.format(trainer.epoch), log)
 print('Schedule finished!')
